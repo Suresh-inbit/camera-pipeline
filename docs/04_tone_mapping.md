@@ -15,7 +15,7 @@ After white balance and demosaicing the image is still *linear*: pixel values ar
 
 **Automatic dodge and burn (base/detail).** Work in the log of luminance, `L = log2 Y`, where multiplying light by a factor is an addition. Split `L = B + D` with a smooth base `B` (the local brightness, the "where would the card go" map) and a detail layer `D = L - B` (texture and edges). Then
 `L_out = D + (1 - s)(B - B_max) + B_max = L + s (B_max - B)`.
-Every pixel is brightened by `s` times how far its local brightness is below the brightest region, in stops. The detail is untouched, the base contrast is reduced by the factor `1 - s`. This is the scheme of Durand and Dorsey (2002); Reinhard et al. (2002), "Photographic Tone Reproduction", is the classic automatic dodging-and-burning operator that uses a global key plus a local adaptation level. **We implement the Durand-Dorsey base/detail operator** and borrow the idea of an anchor (`B_max`) from Reinhard.
+Every pixel is brightened by `s` times how far its local brightness is below the brightest region, in stops, with that lift soft-limited to about 6 stops, `R tanh(x / R)` with `x = B_max - B` and `R = 6`. Without the limit the darkest region of the scene (here a black visor, 13 stops below white) gets the largest lift of all and is blown out together with its noise; with it a black object is lifted by at most about `0.7 * 6 = 4` stops. The detail is untouched, the base contrast is reduced by the factor `1 - s`. This is the scheme of Durand and Dorsey (2002); Reinhard et al. (2002), "Photographic Tone Reproduction", is the classic automatic dodging-and-burning operator that uses a global key plus a local adaptation level. **We implement the Durand-Dorsey base/detail operator** and borrow the idea of an anchor (`B_max`) from Reinhard.
 
 **Halos.** If `B` is a Gaussian blur, it averages across strong edges. Next to a dark/bright edge the base on the bright side is pulled down by the dark side, so `s (B_max - B)` boosts it too much: a bright halo appears on the bright side (and a dark one on the dark side). An edge-preserving base (bilateral filter, weights `exp(-d^2/2 sigma_s^2) exp(-(L_p - L_q)^2 / 2 sigma_r^2)`, with `sigma_r` in stops) does not average across the step and the halo goes away.
 
@@ -23,7 +23,7 @@ Every pixel is brightened by `s` times how far its local brightness is below the
 Automatic dodge and burn (`dodge_burn`, linear in, linear out):
 1. `Y = 0.2127 R + 0.7152 G + 0.0722 B`, `L = log2(Y + 1e-4)`.
 2. Base `B = smooth(L)` (Gaussian of std `sigma`, or bilateral); detail `D = L - B`.
-3. `L_out = D + (1 - s)(B - B_max) + B_max`; `Y_out = 2^L_out`.
+3. Lift `u = s R tanh((B_max - B) / R)` stops (`R = 6`; for small differences this is `L_out = L + s (B_max - B)`, the Durand-Dorsey formula); `Y_out = Y 2^u`, multiplicative so a true zero stays zero.
 4. Restore colour: `rgb_out = (rgb / Y)^c * Y_out` (`c = saturation = 1`); scale pixels with a channel above 1 down; output in [0, 1].
 5. For display apply the sRGB curve (`tonemap(..., 'local')` does this).
 
@@ -51,12 +51,12 @@ All numbers are printed by `python scripts/make_figures_tonemap.py` (256 x 256 s
 | gamma 1/2.2 | 0.078 | 0.376 | 4.84 | 0.219 | 0.566 |
 | hist-eq | 0.339 | 0.540 | 1.59 | 0.275 | 0.541 |
 | CLAHE | 0.365 | 0.354 | 0.97 | 0.561 | 0.564 |
-| dodge & burn, Gaussian | 0.378 | 0.561 | 1.49 | 0.333 | 0.566 |
-| dodge & burn, bilateral | 0.419 | 0.639 | 1.52 | 0.236 | 0.432 |
+| dodge & burn, Gaussian | 0.220 | 0.514 | 2.34 | 0.348 | 0.633 |
+| dodge & burn, bilateral | 0.224 | 0.531 | 2.37 | 0.334 | 0.610 |
 
-  What to look for. The global curves (sRGB, gamma) keep detail contrast exactly as in the input (same last two columns: a monotone curve acting on all pixels cannot change relative local contrast in log terms) but leave the dark side at 0.05..0.08. Histogram equalisation lifts the dark side to 0.34 with a global curve, at the price of a strongly altered look. CLAHE and dodge-and-burn bring the two halves to a ratio of 1.0..1.5 instead of 7; CLAHE also raises the dark-side detail (0.56, amplifying noise and texture), dodge-and-burn keeps it near the input value (0.33 / 0.24 against 0.22). The bilateral variant gives the lowest bright-side detail (0.432), because it assigns the strongest edges to the base layer.
+  What to look for. The global curves (sRGB, gamma) keep detail contrast exactly as in the input (same last two columns: a monotone curve acting on all pixels cannot change relative local contrast in log terms) but leave the dark side at 0.05..0.08. Histogram equalisation lifts the dark side to 0.34 with a global curve, at the price of a strongly altered look. CLAHE brings the two halves to a ratio of 1.0 and dodge-and-burn to about 2.3, instead of 7; CLAHE also raises the dark-side detail (0.56, amplifying noise and texture), dodge-and-burn keeps it near the input value (0.35 / 0.33 against 0.22). Dodge-and-burn lifts the shadowed left half (mean display value 0.05 -> 0.22) but keeps the black helmet visor at the bottom right black: its dark pixels (input mean 0.0002) end at 0.002 linear (max 0.03), because the lift is bounded (see below); an earlier version without the bound turned the visor white with dark speckles (dark-visor mean 0.010 / 0.025 and maxima 0.28 / 0.86 for Gaussian / bilateral base). Histogram equalisation does lift the visor, which is simply what a global equaliser does: it spends output range on the many dark pixels.
 * `docs/figures/tonemap_halo_zoom.png` - the transition region at 3x: sRGB, Gaussian base and bilateral base. Look at the helmet and the shuttle/flag edges: the Gaussian base shows a bright rim next to dark objects, the bilateral base is clean.
-* `docs/figures/tonemap_halo_profile.png` - one row through a 0.05 -> 0.8 step edge after `dodge_burn` (`sigma = 8`, `strength = 0.7`). Overshoot beyond the plateau as a fraction of the step height: **0.458 for the Gaussian base against 0.015 for the bilateral base**.
+* `docs/figures/tonemap_halo_profile.png` - one row through a 0.05 -> 0.8 step edge after `dodge_burn` (`sigma = 8`, `strength = 0.7`). Overshoot beyond the plateau as a fraction of the step height: **0.379 for the Gaussian base against 0.013 for the bilateral base**.
 * `docs/figures/tonemap_base_detail.png` - the decomposition. The log luminance spans 13.3 stops; the bilateral base spans 13.2 stops (it keeps the large edges, e.g. the helmet, and so removes only the texture) while the Gaussian base spans 11.5 (the large edges are smeared). The detail layer of the Gaussian version has big values along strong edges; those are the future halos. The last panel is the compressed base recombined with the detail.
 * `docs/figures/tonemap_mask.png` - `dodge_burn_mask`: the face region is dodged by +1 stop (mean linear luminance 0.155 -> 0.288, x1.86 instead of x2 because the mask is feathered and some pixels clip), then the bottom strip burned by -1 stop (0.071 -> 0.037).
 

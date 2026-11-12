@@ -231,7 +231,7 @@ def _noise(shape, sigma, seed):
 
 
 def field_sequential(scene, motion=(0.0, 0.0), frames=None, noise=0.0, seed=0) -> np.ndarray:
-    """Field-sequential capture: R, G, B are three exposures at times 0, 1, 2 (L3 s5-7).
+    """Field-sequential capture: R, G, B are three exposures at times 0, 1, 2 (L3 s6-7).
 
     The scene moves by ``motion = (dy, dx)`` pixels per exposure (or pass your own
     ``frames=(f_R, f_G, f_B)``).  ``out[..., c] = frame_c[..., c]``.  Static: exact.
@@ -246,7 +246,7 @@ def field_sequential(scene, motion=(0.0, 0.0), frames=None, noise=0.0, seed=0) -
 
 
 def three_sensor(scene, noise=0.0, seed=0) -> np.ndarray:
-    """Ideal 3-sensor camera (prism + 3 sensors, L3 s8): every pixel gets R, G and B.  Exact when noise = 0."""
+    """Ideal 3-sensor camera (prism + 3 sensors, L3 s9): every pixel gets R, G and B.  Exact when noise = 0."""
     s = np.asarray(scene, dtype=np.float32)
     return (s + _noise(s.shape, noise, seed)).astype(np.float32)
 

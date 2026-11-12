@@ -12,7 +12,7 @@ the camera pipeline (demosaicing, white balance, denoising) inherits this noise,
 so it pays to know where each part comes from and which part can be removed.
 `isp.sensor` simulates the chain of L2 s34 pixel by pixel, in physical units
 (electrons, seconds), and gives you the closed-form SNR and dynamic range of
-L2 s31 and s33 to check the simulation against.
+L2 s31-33 to check the simulation against.
 
 ## 2. Theory
 
@@ -29,18 +29,18 @@ For a pixel with photon flux `P` (photons/s), quantum efficiency `Q_e`, exposure
 - readout: `DN = round(g (n + N(0, N_r^2)) + black)`, with `g = g_100 * ISO/100`
   in DN per electron.
 
-### 2.2 Noise types (L2 s18-30, s42-44)
+### 2.2 Noise types (L2 s18-30)
 
 | source | statistics | removable? |
 |---|---|---|
 | photon (shot) noise | Poisson, variance = mean signal | no, set by physics |
 | dark current | Poisson on `D t`; mean grows with `t` and temperature | its mean yes (dark frame); its shot noise no |
 | hot pixels | a few pixels with huge `D` | yes: dark frame or median fix |
-| fixed pattern (PRNU, DSNU) | the same every shot; gain error and dark offset | yes: read once, subtract (s43) |
-| read noise | Gaussian, independent per readout | no (cooling at best, s44) |
+| fixed pattern (PRNU, DSNU) | the same every shot; gain error and dark offset | yes: read once, subtract (s28-29) |
+| read noise | Gaussian, independent per readout | no (cooling at best, s30) |
 | quantisation | uniform, variance 1/12 DN^2 | no, but irrelevant if noise >> 1 DN |
 
-### 2.3 SNR (L2 s31, s45)
+### 2.3 SNR (L2 s31-32)
 
 Independent noise sources add in variance, `sigma^2 = sigma_photon^2 + sigma_dark^2 + sigma_read^2`, so
 
@@ -50,7 +50,7 @@ Two regimes follow.  When the signal is large, SNR `~ sqrt(P Q_e t)`: shot-noise
 limited, doubling the exposure gains `sqrt 2`.  When it is small, SNR `~ P Q_e t / N_r`:
 read-noise limited, SNR grows linearly with exposure.
 
-Slide 31 examples (reproduced by `snr_theory`): Retiga 4000R at 1000 photons/px/s,
+Slide 32 examples (reproduced by `snr_theory`): Retiga 4000R at 1000 photons/px/s,
 1 s: **20.8:1**; Aptina MT9P031 with pixels 1/11 the area (`P = 1000/11`): **6.5:1**.
 
 ### 2.4 Dynamic range (L2 s33)
@@ -62,7 +62,7 @@ Largest signal over the noise floor in the dark.  Slide values reproduced by
 and ~3200:1 (1/60 s).  The Aptina drops at long exposure because its dark current
 (25 e-/s) eats the well and adds noise.
 
-### 2.5 ISO and exposure (L2 s40)
+### 2.5 ISO and exposure (L2 s36-39)
 
 ISO multiplies the signal **and** the noise that exists before the amplifier, so
 it does not change the electron-domain SNR.  It only decides where the signal
@@ -199,7 +199,7 @@ linear = S.normalize(dn, meta)           # in [0, 1] for the next stage
 ## 7. Limitations and extensions
 
 - One PRNU and one DSNU level, i.i.d. per pixel.  Real CMOS sensors have row and
-  column pattern noise (L2 s43 shows it); adding `r[:, None] + c[None, :]` is a small extension.
+  column pattern noise (L2 s29-30 show it); adding `r[:, None] + c[None, :]` is a small extension.
 - Dark current is temperature independent; it roughly doubles every 6 K.
 - No lens, blooming, charge transfer, or rolling shutter.
 - ADC noise beyond rounding, and non-linearity, are not modelled.
@@ -212,6 +212,6 @@ linear = S.normalize(dn, meta)           # in [0, 1] for the next stage
 - M. Levoy, *Computational Photography*, lecture slides "Sensors and Noise"
   (Stanford CS 448 / lecture 2 of this course), slides cited as L2 sNN.
 - Hamamatsu, *Concepts in digital imaging: CCD signal-to-noise ratio*,
-  learn.hamamatsu.com (source of the SNR formula on L2 s45).
+  learn.hamamatsu.com (source of the SNR formula on L2 s31).
 - J. Janesick, *Photon Transfer*, SPIE Press, 2007.
 - EMVA Standard 1288, *Characterization of image sensors and cameras*.

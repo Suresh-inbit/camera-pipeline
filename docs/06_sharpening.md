@@ -73,6 +73,6 @@ print(S.noise_gain(S.sharpening_kernel(1)))                    # 5.39
 * Extensions: edge-aware unsharp masking (bilateral or guided-filter base layer, no halos), noise-adaptive thresholds, local-contrast (large sigma) vs. detail (small sigma) in one pipeline, deconvolution (Wiener, Richardson-Lucy) as the principled alternative, and the pipeline order in `isp.pipeline` (tone map -> denoise -> sharpen -> JPEG).
 
 ## 8. References
-* Lecture 5 "Post-processing: Denoising, Sharpening, Compression", slides 11-17 (Photoshop Custom kernels, unsharp masking S = x + lam F(x)); the unsharp-masking figure is credited on the slide to NPTEL (chapter 8).
+* Lecture 5 "Post-processing: Denoising, Sharpening, Compression", slides 12-17 (Photoshop Custom kernels, unsharp masking S = x + lam F(x)); the unsharp-masking figure is credited on the slide to NPTEL (chapter 8).
 * R. C. Gonzalez and R. E. Woods, *Digital Image Processing*, 4th ed., sections 3.6 (Sharpening spatial filters: Laplacian, unsharp masking, high-boost filtering).
 * A. K. Jain, *Fundamentals of Digital Image Processing*, 1989 (unsharp masking as a high-pass boost).

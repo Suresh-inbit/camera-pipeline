@@ -132,3 +132,21 @@ def test_histogram():
     img = scenes.gray_ramp(64)
     assert T.histogram(img, 16).sum() == 64 * 64
     assert T.histogram(img, 16, per_channel=True).shape == (3, 16)
+
+
+def test_dodge_burn_keeps_black_object_dark():
+    # regression: a deep-black object in the bright half used to be lifted ~12 stops and
+    # blow out to white with speckles; now it is lifted by a bounded amount.
+    img = scenes.high_contrast(128).copy()
+    yy, xx = np.mgrid[:128, :128]
+    disc = (yy - 90) ** 2 + (xx - 100) ** 2 < 18 ** 2
+    img[disc] = 0.002
+    img[(yy - 90) ** 2 + (xx - 100) ** 2 < 4 ** 2] = 0.0          # true black pixels inside
+    left = utils.luminance(img)[:, :32].mean()
+    for base in ("gaussian", "bilateral"):
+        out = T.dodge_burn(img, sigma=8, strength=0.7, base=base)
+        yo = utils.luminance(out)
+        assert yo[disc].mean() < 0.03, (base, yo[disc].mean())
+        assert yo[disc].max() < 0.04, (base, yo[disc].max())
+        assert out[(yy - 90) ** 2 + (xx - 100) ** 2 < 4 ** 2].max() == 0.0   # zero stays zero
+        assert yo[:, :32].mean() > 5 * left                          # shadows are still lifted

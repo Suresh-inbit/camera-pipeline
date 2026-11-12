@@ -98,7 +98,7 @@ def fig_snr():
     save(fig, "sensor_snr_vs_exposure.png")
     for name, flux in (("retiga_4000r", 1000.0), ("aptina_mt9p031", 1000.0 / 11)):
         p = S.PRESETS[name]
-        print(f"    L2 s31 {p.name}: SNR(1 s) = {S.snr_theory(flux, p.qe, 1.0, p.dark_current, p.read_noise):.1f}")
+        print(f"    L2 s32 {p.name}: SNR(1 s) = {S.snr_theory(flux, p.qe, 1.0, p.dark_current, p.read_noise):.1f}")
         for t in (1, 1 / 60):
             print(f"    L2 s33 {p.name} DR(t={t:.4f}) = {S.dynamic_range(p.full_well, p.dark_current, t, p.read_noise):.0f}:1")
 

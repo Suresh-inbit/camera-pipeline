@@ -9,7 +9,7 @@ def flat(v, n=64):
     return np.full((n, n), v, np.float32)
 
 
-def test_snr_theory_slide31():
+def test_snr_theory_slide32():
     r = S.PRESETS["retiga_4000r"]
     a = S.PRESETS["aptina_mt9p031"]
     assert abs(S.snr_theory(1000, r.qe, 1.0, r.dark_current, r.read_noise) - 20.8) < 0.1

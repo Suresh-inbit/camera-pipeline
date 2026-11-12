@@ -65,7 +65,7 @@ class SensorParams:
 
 
 PRESETS = {
-    # numbers of L2 s31 / s33
+    # sensor numbers of L2 s27, SNR examples of L2 s32, dynamic range of L2 s33
     "retiga_4000r": SensorParams(qe=0.55, full_well=40000, dark_current=1.64, read_noise=12.0,
                                  bits=12, black_level=64, prnu=0.005, dsnu=0.2,
                                  hot_pixel_fraction=1e-4, hot_pixel_rate=30.0, name="Retiga 4000R"),
@@ -93,7 +93,7 @@ def fixed_pattern(shape, params: SensorParams) -> dict:
     ``dark`` the per-pixel dark current in e-/s (mean + DSNU + hot pixels, >= 0) and
     ``hot`` the boolean hot-pixel map.  Derived only from ``params.sensor_seed`` and
     ``shape``: identical on every call, so a dark frame measured once describes every
-    later exposure (L2 s43).
+    later exposure (L2 s28-29).
     """
     shape = tuple(int(s) for s in shape)
     r = np.random.default_rng(np.random.SeedSequence([int(params.sensor_seed), *shape]))
@@ -115,7 +115,7 @@ def expose(image, exposure, params: SensorParams, flux_at_white=DEFAULT_FLUX, se
 
     Parameters: image in [0, 1] (linear), exposure in s, flux_at_white in photons/pixel/s,
     seed for the per-shot noise (fixed pattern does not depend on it).
-    Returns float32 electrons.   Reference: L2 s34, s45.
+    Returns float32 electrons.   Reference: L2 s34, s31.
     """
     img = np.clip(np.asarray(image, dtype=np.float64), 0.0, None)
     fp = fixed_pattern(img.shape, params)
@@ -129,7 +129,7 @@ def adc(electrons, params: SensorParams, iso=100, seed=0):
     """Electrons -> digital numbers: + read noise, gain, black level, rounding, clipping.
 
     DN = clip(round(gain (e + N(0, N_r^2)) + black), 0, 2^bits - 1),  gain = base_gain iso/100.
-    Returns float32 holding integers.   Reference: L2 s34, s40.
+    Returns float32 holding integers.   Reference: L2 s34, s39.
     """
     e = np.asarray(electrons, dtype=np.float64)
     e = e + rng(seed).standard_normal(e.shape) * params.read_noise
@@ -156,7 +156,7 @@ def capture(image, exposure, iso, params: SensorParams, flux_at_white=DEFAULT_FL
 # calibration and clean-up
 # --------------------------------------------------------------------------
 def dark_frame(shape, exposure, iso, params: SensorParams, seed=1):
-    """Lens-cap exposure: dark current, hot pixels, FPN and read noise only (L2 s42-43)."""
+    """Lens-cap exposure: dark current, hot pixels, FPN and read noise only (L2 s24-30)."""
     return adc(expose(np.zeros(shape), exposure, params, seed=seed), params, iso, seed=seed + 7919)
 
 
@@ -209,7 +209,7 @@ def average_frames(frames):
 # theory
 # --------------------------------------------------------------------------
 def snr_theory(P, qe, t, D, Nr):
-    """SNR = P QE t / sqrt(P QE t + D t + Nr^2).   Reference: L2 s31, s45."""
+    """SNR = P QE t / sqrt(P QE t + D t + Nr^2).   Reference: L2 s31-32."""
     s = np.asarray(P, np.float64) * qe * t
     return s / np.sqrt(s + D * t + Nr ** 2)
 
@@ -234,7 +234,7 @@ def measure_snr(params: SensorParams, value=0.5, exposure=0.01, iso=100, n=32, s
 
     Uses the temporal std of each pixel (so fixed pattern does not count as noise), in
     electrons.  ``mean_e`` is the signal charge (mean dark charge removed, as in the
-    numerator of L2 s45).  Returns dict(snr, mean_e, std_e).  Compare with ``snr_theory_params``.
+    numerator of L2 s31).  Returns dict(snr, mean_e, std_e).  Compare with ``snr_theory_params``.
     """
     img = np.full(shape, value, np.float64)
     stack = np.stack([capture(img, exposure, iso, params, flux_at_white, seed=seed + k)[0]

@@ -19,6 +19,7 @@ from .utils import linear_to_srgb, luminance
 
 _EPS = 1e-6
 _LOG_EPS = 1e-4  # floor for log luminance: 13 stops below white, keeps pure black from dominating
+_MAX_LIFT = 6.0  # stops: soft limit of the base-layer lift in dodge_burn
 METHODS = ("srgb", "linear", "gamma", "hist", "clahe", "local")
 
 
@@ -187,15 +188,27 @@ def dodge_burn(img, sigma=None, strength: float = 0.6, base: str = "gaussian",
                sigma_r: float = 0.5, saturation: float = 1.0, return_layers: bool = False):
     """Automatic dodging and burning (local tone mapping), linear in -> linear out.
 
-    With L = log2 Y split into base B and detail D (:func:`decompose`):
+    With L = log2 Y split into base B and detail D (:func:`decompose`), the anchor is the
+    brightest base value B_max (Durand-Dorsey: the max base maps to 0 stops, the rest is
+    compressed towards it):
 
         L_out = D + (1 - strength) * (B - B_max) + B_max  =  L + strength * (B_max - B)
 
     The base layer's contrast is compressed towards its brightest value (dark regions
     are lifted = dodged relative to bright ones = burned) while the detail layer is
-    kept untouched.  Colour is restored as  rgb_out = (rgb / Y)^saturation * Y_out.
-    ``strength=0`` returns the input; ``strength=1`` flattens the base layer completely.
-    The result is scaled down per pixel where a channel would exceed 1 (hue kept).
+    kept untouched.  Two guards keep deep blacks black:
+
+    * the lift ``x = B_max - B`` (stops) is soft-limited, ``R tanh(x / R)`` with R = 6
+      stops (about ``x`` for small ``x``), so the darkest regions are not lifted without
+      bound (a black object is lifted by at most ~``strength * 6`` stops, not by the full
+      13-stop range of the scene);
+    * the gain is applied multiplicatively, ``Y_out = Y * 2 ** lift``, so a true zero
+      stays zero (no floor offset is added back).
+
+    Colour is restored as  rgb_out = (rgb / Y)^saturation * Y_out.
+    ``strength=0`` returns the input; ``strength=1`` flattens the base layer up to the
+    soft limit.  The result is scaled down per pixel where a channel would exceed 1 (hue
+    kept).
     Apply :func:`isp.utils.linear_to_srgb` afterwards for display.
 
     This is the Durand-Dorsey base/detail operator; Reinhard et al. (2002) is the classic
@@ -208,9 +221,10 @@ def dodge_burn(img, sigma=None, strength: float = 0.6, base: str = "gaussian",
         out = np.clip(a, 0.0, 1.0)
         return (out, decompose(a, sigma, base, sigma_r)) if return_layers else out
     B, D = decompose(a, sigma, base, sigma_r)
-    L_out = D + (1.0 - strength) * (B - B.max()) + B.max()
     y = luminance(a)
-    y_out = np.clip(np.exp2(L_out) - _LOG_EPS, 0.0, None).astype(np.float32)
+    x = B.max() - B                                    # how far below the brightest base, stops
+    lift = strength * _MAX_LIFT * np.tanh(x / _MAX_LIFT)
+    y_out = (y * np.exp2(lift)).astype(np.float32)     # multiplicative: true black stays black
     if a.ndim == 2:
         out = np.clip(y_out, 0, 1)
     else:

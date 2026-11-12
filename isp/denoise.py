@@ -154,7 +154,7 @@ def bilateral_weights(img, center, sigma_d: float, sigma_r: float, radius: int |
 # --------------------------------------------------------------------------
 def median(img, size: int = 3) -> np.ndarray:
     """Median filter, per channel, ``size x size`` window (good against salt-and-pepper
-    / hot pixels, edge preserving but removes thin detail).  Reference: L3 s27 (same idea)."""
+    / hot pixels, edge preserving but removes thin detail).  Reference: L3 s26 (same idea: a median removes spikes)."""
     img = _f32(img)
     if img.ndim == 2:
         return ndi.median_filter(img, size=size, mode="mirror").astype(np.float32)
