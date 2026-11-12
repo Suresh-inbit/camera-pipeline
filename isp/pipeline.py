@@ -653,7 +653,9 @@ STAGE_INFO = {
         label="White balance", group="processing", short="Per-channel gains that make the light source neutral",
         description="Estimates the colour of the light and multiplies R, G and B so that neutral objects "
                     "become neutral. Here it runs on the RAW mosaic, before demosaicing, with gains "
-                    "estimated from a half-resolution RGB made by binning each 2x2 tile.",
+                    "estimated from a half-resolution RGB made by binning each 2x2 tile. Doing it "
+                    "first matters: Malvar and Freeman's method interpolate colour differences, "
+                    "which a colour cast makes non-smooth (see docs/08).",
         slides="L4 s9", doc="docs/03_white_balance.md",
         params_help={"method": "none, true (oracle), preset, camera, gray_world, white_patch, patch",
                      "cct": "kelvin, for method 'preset'", "box": "(r0, r1, c0, c1) neutral patch, for 'patch'",

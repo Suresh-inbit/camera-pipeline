@@ -68,7 +68,20 @@ On a smooth photograph a single-frame detector removes the defects and improves 
 
 * **Denoise before demosaic** is 1.5 dB worse. Each of the four site planes is a quarter of the pixels (the red plane has no green neighbours to help), the filter has to work on noise that the demosaicer has not yet combined, and noise is then spread by the interpolation. The image is smoother (the file is 5 % smaller) but lower in SSIM. The order that works better in the default camera is the one most cameras use, and it is also the cheapest: three planes instead of four.
 * **Sharpen before denoise** (both on linear data) loses 0.45 dB: the denoiser smooths what the sharpener has just added, and the sharpener amplifies noise that the denoiser then has to remove. The default sharpens last, on display data.
-* **White balance before or after demosaicing.** With a linear interpolator (bilinear) the two orders give *exactly* the same image: demosaicing interpolates each colour plane on its own, which commutes with multiplying that plane by a constant (the difference is 0.00 and the PSNR is identical). With the two demosaicers that look across channels, Freeman's median and Malvar (which work on colour differences such as R-G), the order matters: balancing after demosaicing loses 1.8 dB and the file is 15 % bigger (probably because more colour noise is left). The default does the white balance on the mosaic, so those methods see balanced channels. We verified the exact equality for bilinear and measured the loss for the median demosaicer; we did not isolate the mechanism further.
+* **White balance before or after demosaicing.** With a linear interpolator (bilinear) the two orders give *exactly* the same image: demosaicing interpolates each colour plane on its own, which commutes with multiplying that plane by a constant (the difference is 0.00 and the PSNR is identical). With the two demosaicers that look across channels, Freeman's median and Malvar, the order matters: in the full default camera, balancing after demosaicing loses 1.8 dB and the file is 15 % bigger. The cause is the colour cast. Both methods assume the colour differences R-G and B-G are smooth (Freeman median-filters them, Malvar adds a scaled green Laplacian to R and B). That holds for balanced channels, where a grey edge is the same step in R, G and B and cancels in R-G. Under tungsten light the raw red is about 1.8x green and blue about 0.35x, so a grey edge is a large step in R-G, and the interpolation treats it as colour detail. The sweep below proves it: with the denoiser, sharpener, JPEG and hot-pixel fix off and the oracle gains in both orders, the loss is exactly 0 without a cast (6504 K) and grows with the cast, while bilinear stays at 0 throughout. That is why the default (and real raw converters such as dcraw / LibRaw) applies the white-balance gains to the RAW mosaic before demosaicing. The lecture 2 slide 3 box lists demosaicing first, but its point is only that the order varies between cameras.
+
+![PSNR change when white balance is moved after demosaicing, against the colour cast](figures/pipeline_wb_order_cast.png)
+
+| illuminant | 6504 K | 5000 K | 4000 K | 3200 K | 2500 K |
+|---|---|---|---|---|---|
+| raw R / G and B / G scale (1 / gains) | 1.00 / 1.00 | 1.19 / 0.75 | 1.43 / 0.55 | 1.81 / 0.35 | 2.48 / 0.17 |
+| bilinear, noise-free | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| Malvar, noise-free | 0.00 | -1.29 | -3.54 | -6.42 | -10.05 |
+| Freeman median, noise-free | 0.00 | -1.21 | -3.35 | -6.08 | -9.37 |
+| Malvar, noisy default sensor | 0.00 | -0.71 | -1.86 | -3.26 | -4.64 |
+| Freeman median, noisy default sensor | 0.00 | -0.64 | -1.69 | -2.93 | -4.14 |
+
+(PSNR change in dB of the final image. With noise the loss is smaller because noise already limits the quality of both orders.)
 * The estimated gains also differ a little between the orders: white patch finds `[0.536, 1, 2.82]` from the binned mosaic and `[0.561, 1, 2.55]` from the demosaiced image.
 
 ### 5.3 Noisy RAW into JPEG (L2 s15)

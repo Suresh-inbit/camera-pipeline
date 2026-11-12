@@ -388,6 +388,44 @@ def ablation_bits():
 
 
 # ==========================================================================
+WB_CCTS = (6504, 5000, 4000, 3200, 2500)
+WB_METHODS = (("bilinear", "#555555"), ("malvar", "#0072B2"), ("median", "#D55E00"))
+
+
+def wb_order_psnr(cct, method, wb_after, noisy):
+    """Final PSNR with 'true' gains; denoise, sharpen, JPEG and hot-pixel fix off so only the order differs."""
+    over = dict(illuminant={"cct": cct}, white_balance={"method": "true"}, demosaic={"method": method})
+    if not noisy:
+        over.update(exposure={"oracle": True}, adc={"oracle": True})
+    p = P.default_pipeline(**over)
+    for s in ("hot_pixels", "denoise", "sharpen", "jpeg"):
+        p.enable(s, False)
+    if wb_after:
+        p.move("white_balance", after="demosaic")
+    return fm(sim(pipeline=p), "psnr")
+
+
+def ablation_wb_order_cast():
+    """Why white balance goes before demosaicing: the loss of balancing afterwards vs the colour cast."""
+    print("\n== white balance after instead of before demosaicing: final PSNR change (dB) vs colour cast")
+    fig, axs = plt.subplots(1, 2, figsize=(11, 3.8), sharey=True)
+    for ax, noisy in zip(axs, (False, True)):
+        print(f"  {'noisy default sensor' if noisy else 'noise-free sensor'}")
+        for m, col in WB_METHODS:
+            d = [wb_order_psnr(c, m, True, noisy) - wb_order_psnr(c, m, False, noisy) for c in WB_CCTS]
+            print(f"    {m:9s} " + "  ".join(f"{c} K {v:+6.2f}" for c, v in zip(WB_CCTS, d)))
+            ax.plot(WB_CCTS, d, "o-", color=col, label=m)
+        ax.axhline(0, color="#999999", lw=0.8)
+        ax.invert_xaxis()
+        ax.set_xlabel("illuminant (K); left = no cast, right = strong tungsten cast")
+        ax.set_title("noisy default sensor" if noisy else "noise-free sensor", fontsize=10)
+        ax.grid(alpha=0.3)
+    axs[0].set_ylabel("PSNR change when WB is moved\nafter demosaicing (dB)")
+    axs[0].legend(fontsize=8)
+    fig.tight_layout()
+    save(fig, "pipeline_wb_order_cast.png")
+
+
 def main():
     t0 = time.time()
     res = sim()
@@ -425,6 +463,7 @@ def main():
     ablation_stages(res)
     hot_pixel_sweep()
     ablation_order()
+    ablation_wb_order_cast()
     ablation_jpeg()
     ablation_iso()
     ablation_bits()

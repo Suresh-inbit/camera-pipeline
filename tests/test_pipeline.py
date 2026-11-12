@@ -108,6 +108,35 @@ def test_reordered_stages_work():
     assert np.array_equal(out == 0, red == 0)
 
 
+def _wb_order_psnr(scene, cct, method, wb_after):
+    p = P.default_pipeline(illuminant={"cct": cct}, white_balance={"method": "true"},
+                           demosaic={"method": method}, exposure={"oracle": True}, adc={"oracle": True})
+    for s in ("hot_pixels", "denoise", "sharpen", "jpeg"):
+        p.enable(s, False)
+    if wb_after:
+        p.move("white_balance", after="demosaic")
+    return P.simulate(scene, pipeline=p).final.metrics["psnr"]
+
+
+@pytest.mark.parametrize("method", ["bilinear", "malvar", "median"])
+def test_white_balance_before_demosaic_matters_only_under_a_cast(method):
+    """Noise-free sensor, oracle gains: moving WB after demosaicing is harmless without a
+    colour cast and for per-channel (bilinear) interpolation, but costs the colour-difference
+    demosaicers (Malvar, Freeman median) under tungsten light (docs/08, section 5.2)."""
+    scene = scenes.load("astronaut", 128)
+    for cct in (6504, 3200):
+        loss = _wb_order_psnr(scene, cct, method, False) - _wb_order_psnr(scene, cct, method, True)
+        if method == "bilinear" or cct == 6504:
+            assert abs(loss) < 0.01
+        else:
+            assert loss > 2.0
+
+
+def test_default_order_balances_before_demosaicing():
+    names = P.default_pipeline().names
+    assert names.index("white_balance") < names.index("demosaic")
+
+
 def test_dark_frame_and_hot_pixels_remove_defects():
     scene = scenes.load("chelsea", SIZE)           # smooth image: defects stand out
     kw = dict(exposure={"sensor_kw": {"hot_pixel_fraction": 5e-3, "hot_pixel_rate": 40000.0}},
