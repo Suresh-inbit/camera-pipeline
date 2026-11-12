@@ -12,13 +12,14 @@ Conventions (full text in docs/conventions.md)
 import importlib
 
 from . import utils, scenes, pipeline
-from .pipeline import Pipeline, Stage, StageRecord, PipelineResult
+from .pipeline import (Pipeline, Stage, StageRecord, PipelineResult, default_pipeline, simulate,
+                       STAGE_INFO, GROUP_INFO)
 
 _METHOD_MODULES = ("sensor", "cfa", "demosaic", "whitebalance", "tonemap",
                    "denoise", "sharpen", "jpeg", "display", "io")
 
 __all__ = ["utils", "scenes", "pipeline", "Pipeline", "Stage", "StageRecord",
-           "PipelineResult", *_METHOD_MODULES]
+           "PipelineResult", "default_pipeline", "simulate", "STAGE_INFO", "GROUP_INFO", *_METHOD_MODULES]
 
 
 def __getattr__(name):

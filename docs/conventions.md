@@ -157,3 +157,24 @@ generation_loss(img, n=10, quality=75, shift=0) -> list of dict
 a `PipelineResult` with one `StageRecord` per stage (output image, meta, parameters,
 time, metrics). `group` is one of `scene | sensor | adc | processing | storage`, the
 boxes of the camera pixel pipeline diagram (L2 s3).
+
+### 5.1 Default camera, stage ids and catalogue (`isp.pipeline`)
+
+`default_pipeline(**overrides)` returns 13 stages with these ids, in this order (the app uses the
+ids as navigation keys): `scene`, `illuminant` (group `scene`); `cfa`, `exposure` (`sensor`); `adc`
+(`adc`); `black_level`, `hot_pixels`, `white_balance`, `demosaic`, `denoise`, `tonemap`, `sharpen`
+(`processing`); `jpeg` (`storage`). Overrides are `stage_id={'param': value}` and
+`enabled={'stage_id': False}`.
+
+* `STAGE_INFO[id]` = `{label, group, short (<= 70 chars), description, slides, doc, params_help}`;
+  `GROUP_INFO[group]` = `{label, colour}`; `DEFAULT_PARAMS[id]` the default parameters.
+* `simulate(scene, size, pipeline=None, previous=None, **overrides)` runs the camera with
+  per-stage metrics (`StageMetrics`: `psnr`, `ssim`, `sigma`, `cast_deg`, `wb_angular_error`,
+  `psnr_noise`); `Pipeline.run(..., start=, previous=)` skips early stages / reuses an unchanged prefix.
+* Data between the stages: the `cfa` stage output is a *mosaic in the `scene` domain* (shape
+  `(H, W)`, linear light, `meta['cfa']` set); the `illuminant` stage may push red above 1.
+  `meta['sensor_params']` (a dict of `SensorParams`) travels from `exposure` to `adc`;
+  `meta['scene_scale']` is the brightness factor of exposure x ISO x digital gain, used by the metrics.
+* A stage that needs another domain raises `ValueError` naming itself (order rules: docs/00, section 4).
+* `isp.display.render(record)` shows any stage output as `uint8` RGB; `isp.io.load_image` /
+  `load_raw` / `save_png` read and write files (`load_raw` needs the optional `rawpy`).
