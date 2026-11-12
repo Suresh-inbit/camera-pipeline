@@ -15,7 +15,7 @@ _EPS = 1e-12
 
 # Correlated colour temperatures from L4 s7-8 (kelvin).
 PRESETS = {
-    "candle": 1900,
+    "candle": 2000,        # slide range 1000-2000 K; below ~1950 K blue leaves the sRGB gamut
     "incandescent": 3200,
     "sunrise": 3500,
     "fluorescent": 4000,

@@ -173,3 +173,12 @@ def test_angular_error():
     assert W.angular_error([1, 1, 1], [2, 2, 2]) == pytest.approx(0.0, abs=1e-5)
     assert W.angular_error([1, 0, 0], [0, 1, 0]) == pytest.approx(90.0)
     assert W.angular_error([1, 1, 1], [1, 0, 0]) == pytest.approx(54.7356, abs=1e-3)
+
+
+@pytest.mark.parametrize("name", sorted(W.PRESETS))
+def test_every_preset_relights(name):
+    """Every named light source is inside the sRGB gamut, so it can relight a scene."""
+    rgb = W.illuminant_rgb(W.PRESETS[name])
+    assert np.all(rgb > 0)
+    img = W.apply_illuminant(scenes.patches(64), W.PRESETS[name])
+    assert np.isfinite(img).all() and img.min() >= 0 and img.max() <= 1
