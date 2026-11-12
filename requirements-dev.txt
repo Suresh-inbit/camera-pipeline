@@ -1,0 +1,7 @@
+# Extras for tests, notebooks and real RAW files (not needed to deploy the app).
+-r requirements.txt
+pytest>=8
+jupyterlab>=4
+ipywidgets>=8
+nbconvert>=7
+rawpy>=0.21        # optional: isp.io.load_raw for .dng/.cr2/.nef files
