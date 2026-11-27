@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pipeline_nav</title>
+<!--
+  Clickable camera-pipeline diagram: a zero-build Streamlit component (no npm, no
+  streamlit-component-lib).  The wire protocol is implemented by hand; it was read from the
+  installed Streamlit (static/static/js/index.*.js, createIframeMessageHandler):
+
+    component -> host   window.parent.postMessage({isStreamlitMessage: true, type: ..., ...}, "*")
+        streamlit:componentReady   {apiVersion: 1}
+        streamlit:setComponentValue {value: <json>, dataType: "json"}
+        streamlit:setFrameHeight    {height: <px>}
+    host -> component   message event, event.data = {type: "streamlit:render",
+                        args: {...python kwargs...}, disabled, theme: {...}}
+
+  args: {nodes: [...], groups: {id: {label, colour}}, current: "overview" | stage id}
+  node: {id, label, group, enabled, available, thumb (data URI), domain, short, index}
+  Clicking a box sends {stage: <id>, nonce: "<time>-<counter>"}; the nonce makes a repeated click
+  on the same stage (or a click after Prev/Next) a new value, so Python can tell it is a new click.
+-->
+<style>
+  :root {
+    --bg: #ffffff; --fg: #262730; --muted: #6b6f7b; --card: #f6f7f9; --line: #d5d8de; --accent: #ff4b4b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: transparent; color: var(--fg);
+               font: 13px/1.25 "Source Sans Pro", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #root { padding: 2px 2px 6px 2px; }
+  .row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px 10px; }
+  .overview { flex: 0 0 auto; width: 74px; border: 2px solid var(--line); border-radius: 8px; background: var(--card);
+              color: var(--fg); cursor: pointer; font: inherit; font-weight: 600; padding: 6px 4px;
+              display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .overview .ico { font-size: 22px; line-height: 1; }
+  .overview:hover { border-color: var(--accent); }
+  .overview.current { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .band { flex: 0 1 auto; display: flex; flex-direction: column; border-radius: 8px; padding: 0 0 6px 0;
+          background: var(--card); border: 1px solid var(--line); overflow: hidden; min-width: 0; }
+  .band > .hdr { color: #fff; font-weight: 700; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+                 padding: 3px 8px; text-shadow: 0 1px 1px rgba(0,0,0,.35); }
+  .boxes { display: flex; flex-wrap: wrap; align-items: stretch; gap: 4px 0; padding: 6px 6px 0 6px; }
+  .arrow { align-self: center; flex: 0 0 auto; width: 16px; text-align: center; color: var(--muted); font-size: 15px; }
+  .arrow.rowstart::before { content: "\21B3"; }       /* wrapped line: shows 'continues' */
+  .arrow:not(.rowstart)::before { content: "\2192"; }
+  .box { flex: 0 0 auto; width: 100px; border: 2px solid var(--line); border-radius: 8px; background: var(--bg);
+         color: var(--fg); padding: 4px 4px 5px 4px; cursor: pointer; text-align: center; font: inherit;
+         display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .box:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .box:focus-visible, .overview:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .box .lab { font-weight: 700; font-size: 12px; min-height: 2.5em; display: flex; align-items: center; justify-content: center; }
+  .box img { width: 88px; height: 88px; object-fit: contain; background: #111; border-radius: 4px; image-rendering: pixelated; }
+  .box .ph { width: 88px; height: 88px; border-radius: 4px; background: repeating-linear-gradient(45deg, var(--card), var(--card) 6px, var(--line) 6px, var(--line) 7px); }
+  .box .dom { font-size: 10.5px; color: var(--muted); min-height: 2.4em; }
+  .box.current { border-width: 3px; box-shadow: 0 0 0 3px var(--gcol, var(--accent)); border-color: var(--gcol, var(--accent)); }
+  .box.disabled { border-style: dashed; opacity: .55; filter: grayscale(1); }
+  .box.unavailable { border-style: dotted; opacity: .35; filter: grayscale(1); }
+  .box .num { position: absolute; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function () {
+  "use strict";
+  var counter = 0;
+  var lastArgs = null;
+
+  // ---- protocol: component -> host ---------------------------------------------------------
+  function send(type, data) {
+    var msg = Object.assign({ isStreamlitMessage: true, type: type }, data || {});
+    window.parent.postMessage(msg, "*");
+  }
+  function setFrameHeight() {
+    var h = Math.ceil(document.getElementById("root").getBoundingClientRect().height) + 8;
+    send("streamlit:setFrameHeight", { height: h });
+  }
+  function click(stage) {
+    counter += 1;
+    send("streamlit:setComponentValue", {
+      value: { stage: stage, nonce: Date.now() + "-" + counter },
+      dataType: "json"
+    });
+  }
+
+  // ---- rendering ----------------------------------------------------------------------------
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function render(args) {
+    lastArgs = args;
+    var nodes = args.nodes || [], groups = args.groups || {}, current = args.current;
+    var root = document.getElementById("root");
+    root.textContent = "";
+    var row = el("div", "row");
+
+    var ov = el("button", "overview" + (current === "overview" ? " current" : ""));
+    ov.type = "button";
+    ov.title = "Overview: final image, quality trace, pipeline controls";
+    ov.appendChild(el("div", "ico", "▦"));
+    ov.appendChild(el("div", "", "Overview"));
+    ov.addEventListener("click", function () { click("overview"); });
+    row.appendChild(ov);
+
+    // bands = runs of consecutive stages of the same group (so a re-ordered pipeline still reads left to right)
+    var bands = [];
+    nodes.forEach(function (n) {
+      var last = bands[bands.length - 1];
+      if (last && last.group === n.group) last.nodes.push(n);
+      else bands.push({ group: n.group, nodes: [n] });
+    });
+
+    var bandEls = [];
+    bands.forEach(function (b, bi) {
+      var g = groups[b.group] || { label: b.group, colour: "#888" };
+      var band = el("div", "band");
+      var hdr = el("div", "hdr", g.label);
+      hdr.style.background = g.colour;
+      band.appendChild(hdr);
+      var boxes = el("div", "boxes");
+      b.nodes.forEach(function (n, ni) {
+        if (ni > 0 || bi > 0) boxes.appendChild(el("span", "arrow"));
+        var cls = "box" + (n.id === current ? " current" : "") + (n.enabled ? "" : " disabled") + (n.available === false ? " unavailable" : "");
+        var box = el("button", cls);
+        box.type = "button";
+        box.style.setProperty("--gcol", g.colour);
+        box.title = n.label + (n.enabled ? "" : " (disabled)") + ": " + (n.short || "");
+        box.setAttribute("data-stage", n.id);
+        box.appendChild(el("div", "lab", n.label));
+        if (n.thumb) {
+          var img = el("img"); img.src = n.thumb; img.alt = n.label + " output"; img.draggable = false;
+          box.appendChild(img);
+        } else {
+          box.appendChild(el("div", "ph"));
+        }
+        box.appendChild(el("div", "dom", n.domain || ""));
+        box.addEventListener("click", function () { click(n.id); });
+        boxes.appendChild(box);
+      });
+      band.appendChild(boxes);
+      row.appendChild(band);
+      bandEls.push(band);
+    });
+    root.appendChild(row);
+
+    // after layout: a band that starts a new line shows a 'continues' glyph instead of an arrow,
+    // then report the height to Streamlit.
+    var layout = function () {
+      var prevTop = null;
+      bandEls.forEach(function (be) {
+        var first = be.querySelector(".arrow");
+        var top = be.offsetTop;
+        if (prevTop !== null && top > prevTop + 4 && first) first.classList.add("rowstart");
+        prevTop = top;
+      });
+      setFrameHeight();
+    };
+    layout();
+    if (window.requestAnimationFrame) window.requestAnimationFrame(layout);
+  }
+
+  // colours come from the Streamlit theme sent with every render message (so light / dark follow the app)
+  function applyTheme(t) {
+    if (!t) return;
+    var r = document.documentElement.style;
+    if (t.backgroundColor) r.setProperty("--bg", t.backgroundColor);
+    if (t.textColor) { r.setProperty("--fg", t.textColor); r.setProperty("--muted", t.textColor + "99"); }
+    if (t.secondaryBackgroundColor) r.setProperty("--card", t.secondaryBackgroundColor);
+    if (t.textColor) r.setProperty("--line", t.textColor + "40");
+    if (t.primaryColor) r.setProperty("--accent", t.primaryColor);
+    if (t.font) document.body.style.fontFamily = t.font;
+  }
+
+  // ---- protocol: host -> component ---------------------------------------------------------
+  window.addEventListener("message", function (event) {
+    var d = event.data;
+    if (!d || d.type !== "streamlit:render") return;
+    applyTheme(d.theme);
+    render(d.args || {});
+  });
+  window.addEventListener("resize", function () { if (lastArgs) render(lastArgs); });
+
+  // announce ourselves (apiVersion 1 is the only version the host accepts), then wait for the first render
+  send("streamlit:componentReady", { apiVersion: 1 });
+  setFrameHeight();
+})();
+</script>
+</body>
+</html>

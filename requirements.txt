@@ -1,0 +1,11 @@
+# Runtime dependencies for the isp package and the Streamlit explorer (app/streamlit_app.py).
+# Streamlit Community Cloud: set "Main file path" to app/streamlit_app.py.
+streamlit>=1.49
+numpy>=1.26
+scipy>=1.11
+scikit-image>=0.22
+opencv-python-headless>=4.8
+matplotlib>=3.8
+imageio>=2.31
+pandas>=2.0
+pillow>=10.0
